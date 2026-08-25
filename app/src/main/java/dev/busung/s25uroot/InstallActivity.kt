@@ -6,7 +6,7 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -32,9 +32,11 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -44,10 +46,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
@@ -80,10 +85,49 @@ class InstallActivity : ComponentActivity() {
                 themeMode = AppPreferences.themeMode(this),
             ) {
                 val installState by installViewModel.state.collectAsStateWithLifecycle()
+                var showModuleOption by remember { mutableStateOf(startInstall) }
+                var disableExistingModules by remember { mutableStateOf(AppPreferences.disableExistingModules(this@InstallActivity)) }
+
                 BackHandler(enabled = installState.busy) {}
-                LaunchedEffect(startInstall, profileId) {
-                    if (startInstall) installViewModel.install(profileId)
+
+                if (showModuleOption) {
+                    AlertDialog(
+                        onDismissRequest = {},
+                        icon = { Icon(Icons.Rounded.Security, contentDescription = null) },
+                        title = { Text("Temporary-root safety option") },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("If KernelSU modules were installed previously, one may have a pending remove marker. KernelSU can run its uninstall.sh during late-load and reboot the phone.")
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Checkbox(
+                                        checked = disableExistingModules,
+                                        onCheckedChange = { disableExistingModules = it },
+                                    )
+                                    Text("Disable existing KernelSU modules before loading KernelSU")
+                                }
+                                Text(
+                                    "When enabled, modules stay installed but are disabled for the transition. Pending remove markers are cleared first.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(onClick = {
+                                AppPreferences.setDisableExistingModules(this@InstallActivity, disableExistingModules)
+                                showModuleOption = false
+                                installViewModel.install(profileId)
+                            }) { Text("Start") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { finish() }) { Text("Cancel") }
+                        },
+                    )
                 }
+
                 InstallScreen(
                     installState = installState,
                     onRetry = { installViewModel.install(profileId) },
@@ -113,98 +157,36 @@ internal val installerSteps = listOf(
 )
 
 private fun clickHaptic(view: View) {
-    view.performHapticFeedback(
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            HapticFeedbackConstants.CONFIRM
-        } else {
-            HapticFeedbackConstants.LONG_PRESS
-        },
-    )
+    view.performHapticFeedback(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS)
 }
 
 @Composable
-private fun InstallScreen(
-    installState: InstallUiState,
-    onRetry: () -> Unit,
-    onClose: () -> Unit,
-) {
+private fun InstallScreen(installState: InstallUiState, onRetry: () -> Unit, onClose: () -> Unit) {
     val logScrollState = rememberScrollState()
     val view = LocalView.current
     LaunchedEffect(installState.log) {
         delay(40)
         logScrollState.scrollTo(logScrollState.maxValue)
     }
-
     Scaffold { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(top = 28.dp, bottom = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.install_title),
-                    style = MaterialTheme.typography.headlineLarge,
-                )
-                Text(
-                    text = if (installState.busy) {
-                        stringResource(R.string.install_keep_open)
-                    } else {
-                        installState.message
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Column(modifier = Modifier.padding(top = 28.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = stringResource(R.string.install_title), style = MaterialTheme.typography.headlineLarge)
+                Text(text = if (installState.busy) stringResource(R.string.install_keep_open) else installState.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
             InstallerStatusCard(installState)
             InstallerSteps(installState.phase)
-            InstallerLog(
-                output = installState.log,
-                modifier = Modifier.weight(1f),
-                scrollState = logScrollState,
-            )
-
+            InstallerLog(output = installState.log, modifier = Modifier.weight(1f), scrollState = logScrollState)
             if (!installState.busy) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (installState.phase == InstallPhase.Failed) {
-                        FilledTonalButton(
-                            onClick = {
-                                clickHaptic(view)
-                                onClose()
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(stringResource(R.string.action_close))
-                        }
-                        Button(
-                            onClick = {
-                                clickHaptic(view)
-                                onRetry()
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(stringResource(R.string.action_retry))
-                        }
+                        FilledTonalButton(onClick = { clickHaptic(view); onClose() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.action_close)) }
+                        Button(onClick = { clickHaptic(view); onRetry() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.action_retry)) }
                     } else if (installState.phase == InstallPhase.Installed) {
-                        Button(
-                            onClick = {
-                                clickHaptic(view)
-                                onClose()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.action_done))
-                        }
+                        Button(onClick = { clickHaptic(view); onClose() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.action_done)) }
                     }
                 }
             }
@@ -214,129 +196,48 @@ private fun InstallScreen(
 
 @Composable
 private fun InstallerStatusCard(installState: InstallUiState) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = when (installState.phase) {
-                InstallPhase.Failed -> MaterialTheme.colorScheme.errorContainer
-                else -> MaterialTheme.colorScheme.primaryContainer
-            },
-            contentColor = if (installState.phase == InstallPhase.Failed) {
-                MaterialTheme.colorScheme.onErrorContainer
-            } else {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            },
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
+    Card(modifier = Modifier.fillMaxWidth().animateContentSize(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(
+        containerColor = if (installState.phase == InstallPhase.Failed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+        contentColor = if (installState.phase == InstallPhase.Failed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+    )) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 AnimatedContent(targetState = installState.phase, label = "install-status-icon") { phase ->
                     when {
-                        installState.busy -> LoadingIndicator(
-                            modifier = Modifier.size(44.dp),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        phase == InstallPhase.Installed -> Icon(
-                            Icons.Rounded.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(44.dp),
-                        )
-                        else -> Icon(
-                            Icons.Rounded.Error,
-                            contentDescription = null,
-                            modifier = Modifier.size(44.dp),
-                        )
+                        installState.busy -> LoadingIndicator(modifier = Modifier.size(44.dp), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        phase == InstallPhase.Installed -> Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(44.dp))
+                        else -> Icon(Icons.Rounded.Error, contentDescription = null, modifier = Modifier.size(44.dp))
                     }
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = installState.message,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    Text(
-                        text = installPhaseDetail(installState.phase),
-                        color = LocalContentColor.current.copy(alpha = 0.78f),
-                    )
+                    Text(text = installState.message, style = MaterialTheme.typography.titleLarge)
+                    Text(text = installPhaseDetail(installState.phase), color = LocalContentColor.current.copy(alpha = 0.78f))
                 }
             }
-            LinearProgressIndicator(
-                progress = { installProgress(installState.phase) },
-                modifier = Modifier.fillMaxWidth(),
-                color = LocalContentColor.current,
-                trackColor = LocalContentColor.current.copy(alpha = 0.2f),
-                drawStopIndicator = {},
-            )
+            LinearProgressIndicator(progress = { installProgress(installState.phase) }, modifier = Modifier.fillMaxWidth(), color = LocalContentColor.current, trackColor = LocalContentColor.current.copy(alpha = 0.2f), drawStopIndicator = {})
         }
     }
 }
 
 @Composable
 private fun InstallerSteps(phase: InstallPhase) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             installerSteps.forEachIndexed { index, step ->
                 val stepState = stepState(phase, index)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    Surface(
-                        modifier = Modifier.size(38.dp),
-                        shape = CircleShape,
-                        color = if (stepState >= 1) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHighest
-                        },
-                        contentColor = if (stepState >= 1) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Surface(modifier = Modifier.size(38.dp), shape = CircleShape,
+                        color = if (stepState >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        contentColor = if (stepState >= 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = if (stepState == 2) Icons.Rounded.Check else step.icon,
-                                contentDescription = null,
-                                modifier = Modifier.size(21.dp),
-                            )
+                            Icon(imageVector = if (stepState == 2) Icons.Rounded.Check else step.icon, contentDescription = null, modifier = Modifier.size(21.dp))
                         }
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(step.title),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        Text(
-                            text = stringResource(step.detail),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
-                        )
+                        Text(text = stringResource(step.title), style = MaterialTheme.typography.titleSmall)
+                        Text(text = stringResource(step.detail), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f))
                     }
-                    if (stepState == 1 && phase !in setOf(InstallPhase.Failed, InstallPhase.Ready)) {
-                        LoadingIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
+                    if (stepState == 1 && phase !in setOf(InstallPhase.Failed, InstallPhase.Ready)) LoadingIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onSurface)
                 }
             }
         }
@@ -344,49 +245,25 @@ private fun InstallerSteps(phase: InstallPhase) {
 }
 
 @Composable
-private fun InstallerLog(
-    output: String,
-    modifier: Modifier,
-    scrollState: androidx.compose.foundation.ScrollState,
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+private fun InstallerLog(output: String, modifier: Modifier, scrollState: androidx.compose.foundation.ScrollState) {
+    Card(modifier = modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.install_live_progress), style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = output.ifBlank { stringResource(R.string.install_preparing) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(scrollState),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(text = output.ifBlank { stringResource(R.string.install_preparing) }, modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(scrollState), fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun installPhaseDetail(phase: InstallPhase): String = stringResource(
-    when (phase) {
-        InstallPhase.Checking -> R.string.phase_checking
-        InstallPhase.Ready -> R.string.phase_ready
-        InstallPhase.Downloading -> R.string.phase_downloading
-        InstallPhase.Exploiting -> R.string.phase_exploiting
-        InstallPhase.LoadingKernelSu -> R.string.phase_loading_ksu
-        InstallPhase.Installed -> R.string.phase_installed
-        InstallPhase.Failed -> R.string.phase_failed
-    },
-)
+private fun installPhaseDetail(phase: InstallPhase): String = stringResource(when (phase) {
+    InstallPhase.Checking -> R.string.phase_checking
+    InstallPhase.Ready -> R.string.phase_ready
+    InstallPhase.Downloading -> R.string.phase_downloading
+    InstallPhase.Exploiting -> R.string.phase_exploiting
+    InstallPhase.LoadingKernelSu -> R.string.phase_loading_ksu
+    InstallPhase.Installed -> R.string.phase_installed
+    InstallPhase.Failed -> R.string.phase_failed
+})
 
 private fun installProgress(phase: InstallPhase): Float = when (phase) {
     InstallPhase.Checking -> 0.1f
