@@ -219,24 +219,27 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
      * KernelSU is being brought up.
      */
     private suspend fun prepareExistingModulesForKsu() {
-        if (!AppPreferences.disableExistingModules(app)) return
-        val command = """
-            set -e
-            base=/data/adb/modules
-            [ -d \"$base\" ] || exit 0
-            for module in \"$base\"/*; do
-                [ -d \"$module\" ] || continue
-                rm -f \"$module/remove\"
-                touch \"$module/disable\"
-            done
-        """.trimIndent()
-        val result = runHelper("-c", command)
-        require(result.code == 0) {
-            "Failed to disable existing KernelSU modules: ${result.output}"
-        }
-        appendLog("[*] Disabled existing KernelSU modules for this installation")
+    if (!AppPreferences.disableExistingModules(app)) return
+
+    val command = """
+        set -e
+        base=/data/adb/modules
+        [ -d "${'$'}base" ] || exit 0
+        for module in "${'$'}base"/*; do
+            [ -d "${'$'}module" ] || continue
+            rm -f "${'$'}module/remove"
+            touch "${'$'}module/disable"
+        done
+    """.trimIndent()
+
+    val result = runHelper("-c", command)
+
+    require(result.code == 0) {
+        "Failed to disable existing KernelSU modules: ${result.output}"
     }
 
+    appendLog("[*] Disabled existing KernelSU modules for this installation")
+}
     private fun drainProcessOutput(process: Process, buffer: StringBuilder): String = try {
         drainStream(process.inputStream, buffer)
         drainStream(process.errorStream, buffer)
