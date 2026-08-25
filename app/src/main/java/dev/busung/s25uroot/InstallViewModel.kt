@@ -197,6 +197,14 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 setPhase(InstallPhase.Exploiting, app.getString(R.string.status_exploit_running))
                 executeExploit(payloads.exploit)
 
+                // The Bromite WebView module was previously marked for removal.
+                // KernelSU's late-load prune runs uninstall.sh synchronously when
+                // it sees the `remove` marker. We now have temporary root, so
+                // clear only that marker before starting KernelSU. This preserves
+                // the module and prevents its uninstall.sh from being executed
+                // during the KSU load that follows.
+                clearBromiteRemovalMarker()
+
                 setPhase(InstallPhase.LoadingKernelSu, app.getString(R.string.status_ksu_loading))
                 installKernelSu(payloads)
 
@@ -253,9 +261,6 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         val readLog: () -> String = if (shizuku) {
             { drainProcessOutput(process, captured) }
         } else {
-            // Keep draining stdout while polling: if the helper fills the OS
-            // pipe buffer it blocks on write and stops making log progress,
-            // which would trip the stall detector spuriously.
             { drainProcessOutput(process, captured); logFile.readTextIfPresent() }
         }
 
@@ -285,8 +290,6 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             val rawLog = readLog()
             cacheP0Offset(bootToken, rawLog)
             publishExploitLog(logPrefix, rawLog)
-            // Both transports drain into `captured` during the poll loop, so
-            // this never blocks on a child still holding the pipe open.
             val earlyOutput = captured.toString().trim()
             require(exitCode == 0) {
                 app.getString(
@@ -306,6 +309,14 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         appendLog(app.getString(R.string.log_bootstrap_root))
+    }
+
+    private suspend fun clearBromiteRemovalMarker() {
+        val result = runHelper("-c", "rm -f $BROMITE_MODULE_PATH/remove")
+        require(result.code == 0) {
+            "Failed to clear Bromite WebView removal marker: ${result.output}"
+        }
+        appendLog("[*] Cleared Bromite WebView module removal marker")
     }
 
     private fun drainProcessOutput(process: Process, buffer: StringBuilder): String {
@@ -559,6 +570,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         private const val P0_OFFSET_ENV = "SLIDE_P0_OFFSET"
         private const val P0_OFFSET_MAX = 0x1f0000L
         private const val P0_OFFSET_MASK = 0xffffL
+        private const val BROMITE_MODULE_PATH = "/data/adb/modules/bromitewebview"
         private const val SHIZUKU_LOG_PATH = "/data/local/tmp/ksu-exploit.log"
         private const val SHIZUKU_HELPER_PATH = "/data/local/tmp/ksu-helper"
         private const val SHIZUKU_PAYLOAD_PATH = "/data/local/tmp/ksu-payload"
