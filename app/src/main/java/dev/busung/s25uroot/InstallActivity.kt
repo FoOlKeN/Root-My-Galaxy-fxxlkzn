@@ -6,7 +6,7 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.activity.BackHandler
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -16,7 +16,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,7 +26,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Memory
@@ -59,7 +57,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -74,20 +71,13 @@ class InstallActivity : ComponentActivity() {
         enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val profileId = intent.getStringExtra(EXTRA_PROFILE_ID)
-        val startInstall = savedInstanceState == null && AppPreferences.consumeInstallRequest(
-            this,
-            intent.getStringExtra(EXTRA_INSTALL_REQUEST_ID),
-        )
+        val startInstall = savedInstanceState == null && AppPreferences.consumeInstallRequest(this, intent.getStringExtra(EXTRA_INSTALL_REQUEST_ID))
         intent.removeExtra(EXTRA_INSTALL_REQUEST_ID)
         setContent {
-            RootMyGalaxyTheme(
-                accentColor = AppPreferences.accentColor(this),
-                themeMode = AppPreferences.themeMode(this),
-            ) {
+            RootMyGalaxyTheme(accentColor = AppPreferences.accentColor(this), themeMode = AppPreferences.themeMode(this)) {
                 val installState by installViewModel.state.collectAsStateWithLifecycle()
                 var showModuleOption by remember { mutableStateOf(startInstall) }
                 var disableExistingModules by remember { mutableStateOf(AppPreferences.disableExistingModules(this@InstallActivity)) }
-
                 BackHandler(enabled = installState.busy) {}
 
                 if (showModuleOption) {
@@ -98,21 +88,11 @@ class InstallActivity : ComponentActivity() {
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text("If KernelSU modules were installed previously, one may have a pending remove marker. KernelSU can run its uninstall.sh during late-load and reboot the phone.")
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Checkbox(
-                                        checked = disableExistingModules,
-                                        onCheckedChange = { disableExistingModules = it },
-                                    )
+                                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = disableExistingModules, onCheckedChange = { disableExistingModules = it })
                                     Text("Disable existing KernelSU modules before loading KernelSU")
                                 }
-                                Text(
-                                    "When enabled, modules stay installed but are disabled for the transition. Pending remove markers are cleared first.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Text("When enabled, modules stay installed but are disabled for the transition. Pending remove markers are cleared first.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         },
                         confirmButton = {
@@ -122,17 +102,10 @@ class InstallActivity : ComponentActivity() {
                                 installViewModel.install(profileId)
                             }) { Text("Start") }
                         },
-                        dismissButton = {
-                            TextButton(onClick = { finish() }) { Text("Cancel") }
-                        },
+                        dismissButton = { TextButton(onClick = { finish() }) { Text("Cancel") } },
                     )
                 }
-
-                InstallScreen(
-                    installState = installState,
-                    onRetry = { installViewModel.install(profileId) },
-                    onClose = ::finish,
-                )
+                InstallScreen(installState = installState, onRetry = { installViewModel.install(profileId) }, onClose = ::finish)
             }
         }
     }
@@ -143,11 +116,7 @@ class InstallActivity : ComponentActivity() {
     }
 }
 
-internal data class InstallerStep(
-    @StringRes val title: Int,
-    @StringRes val detail: Int,
-    val icon: ImageVector,
-)
+internal data class InstallerStep(@StringRes val title: Int, @StringRes val detail: Int, val icon: ImageVector)
 
 internal val installerSteps = listOf(
     InstallerStep(R.string.step_support_title, R.string.step_support_detail, Icons.Rounded.Security),
@@ -164,15 +133,9 @@ private fun clickHaptic(view: View) {
 private fun InstallScreen(installState: InstallUiState, onRetry: () -> Unit, onClose: () -> Unit) {
     val logScrollState = rememberScrollState()
     val view = LocalView.current
-    LaunchedEffect(installState.log) {
-        delay(40)
-        logScrollState.scrollTo(logScrollState.maxValue)
-    }
+    LaunchedEffect(installState.log) { delay(40); logScrollState.scrollTo(logScrollState.maxValue) }
     Scaffold { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(modifier = Modifier.padding(top = 28.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(text = stringResource(R.string.install_title), style = MaterialTheme.typography.headlineLarge)
                 Text(text = if (installState.busy) stringResource(R.string.install_keep_open) else installState.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -196,10 +159,7 @@ private fun InstallScreen(installState: InstallUiState, onRetry: () -> Unit, onC
 
 @Composable
 private fun InstallerStatusCard(installState: InstallUiState) {
-    Card(modifier = Modifier.fillMaxWidth().animateContentSize(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(
-        containerColor = if (installState.phase == InstallPhase.Failed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-        contentColor = if (installState.phase == InstallPhase.Failed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
-    )) {
+    Card(modifier = Modifier.fillMaxWidth().animateContentSize(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = if (installState.phase == InstallPhase.Failed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer, contentColor = if (installState.phase == InstallPhase.Failed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer)) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 AnimatedContent(targetState = installState.phase, label = "install-status-icon") { phase ->
@@ -226,12 +186,8 @@ private fun InstallerSteps(phase: InstallPhase) {
             installerSteps.forEachIndexed { index, step ->
                 val stepState = stepState(phase, index)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Surface(modifier = Modifier.size(38.dp), shape = CircleShape,
-                        color = if (stepState >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
-                        contentColor = if (stepState >= 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(imageVector = if (stepState == 2) Icons.Rounded.Check else step.icon, contentDescription = null, modifier = Modifier.size(21.dp))
-                        }
+                    Surface(modifier = Modifier.size(38.dp), shape = CircleShape, color = if (stepState >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, contentColor = if (stepState >= 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) {
+                        Box(contentAlignment = Alignment.Center) { Icon(imageVector = if (stepState == 2) Icons.Rounded.Check else step.icon, contentDescription = null, modifier = Modifier.size(21.dp)) }
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = stringResource(step.title), style = MaterialTheme.typography.titleSmall)
