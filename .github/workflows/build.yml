@@ -13,11 +13,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java 21
+        id: setup-java
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: gradle
+
+      - name: Verify Java 21
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME"
+          which java
+          java -version
+          which javac
+          javac -version
+          ./gradlew --version
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -30,7 +41,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
