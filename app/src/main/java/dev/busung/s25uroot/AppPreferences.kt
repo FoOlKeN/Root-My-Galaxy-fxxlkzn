@@ -34,6 +34,7 @@ object AppPreferences {
     private const val THEME_MODE = "theme_mode"
     private const val ADVANCED_MODE = "advanced_mode"
     private const val SHIZUKU_MODE = "shizuku_mode"
+    private const val DISABLE_EXISTING_MODULES = "disable_existing_modules"
     private const val CONSUMED_INSTALL_REQUEST = "consumed_install_request"
 
     fun accentColor(context: Context): AccentColor = AccentColor.fromStoredValue(
@@ -71,6 +72,20 @@ object AppPreferences {
     fun setShizukuMode(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(SHIZUKU_MODE, enabled)
+            .apply()
+    }
+
+    /**
+     * When enabled, the installer creates KernelSU's `disable` marker for
+     * existing modules before late-loading KernelSU. The modules remain
+     * installed but cannot execute during the transition.
+     */
+    fun disableExistingModules(context: Context): Boolean =
+        prefs(context).getBoolean(DISABLE_EXISTING_MODULES, false)
+
+    fun setDisableExistingModules(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(DISABLE_EXISTING_MODULES, enabled)
             .apply()
     }
 
